@@ -4,6 +4,7 @@ Given a dictionary of 10000 words, implement the SHARK2 algorithm to decode a us
 
 # Implementation
 The complete implementation of this homework is with the help of the SHARK2 publication authored by Dr. Per Ola Kristensson and Dr. Shumin Zhai.
+Check `server.py`
 
 # Steps
 
