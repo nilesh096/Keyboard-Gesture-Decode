@@ -1,5 +1,4 @@
 '''
-
 You can modify the parameters, return values and data structures used in every function if it conflicts with your
 coding style or you want to accelerate your code.
 
@@ -7,25 +6,24 @@ You can also import packages you want.
 
 But please do not change the basic structure of this file including the function names. It is not recommended to merge
 functions, otherwise it will be hard for TAs to grade your code. However, you can add helper function if necessary.
-
 '''
 
 from flask import Flask, request
 from flask import render_template
 import time
 import json
+import sys
 from scipy.interpolate import interp1d
 import numpy as np
 import math
+import sklearn.metrics
 from sklearn.metrics.pairwise import euclidean_distances
 
 app = Flask(__name__)
 
-# Centroids of 26 keys
 centroids_X = [50, 205, 135, 120, 100, 155, 190, 225, 275, 260, 295, 330, 275, 240, 310, 345, 30, 135, 85, 170, 240, 170, 65, 100, 205, 65]
 centroids_Y = [85, 120, 120, 85, 50, 85, 85, 85, 50, 85, 85, 85, 120, 120, 50, 50, 50, 50, 85, 50, 50, 120, 50, 120, 50, 120]
 
-# Pre-process the dictionary and get templates of 10000 words
 words, probabilities = [], {}
 template_points_X, template_points_Y = [], []
 file = open('words_10000.txt')
@@ -42,6 +40,27 @@ for line in content:
         template_points_X[-1].append(centroids_X[ord(c) - 97])
         template_points_Y[-1].append(centroids_Y[ord(c) - 97])
 
+def get_diff(points):
+    diff = [0]
+    for i in range(len(points)-1):
+        diff.append(points[i+1]-points[i])
+    return np.square(diff)
+
+def cumsum(l: list):
+    if not l:
+        return []
+    sums = []
+    sums.append(l[0])
+    return helper_cumsum(sums, l[1:])
+
+def helper_cumsum(sums: list, xs: list):
+    if not xs:
+        return sums
+    s = sums[len(sums) - 1]
+    sums.append(s + xs[0])
+    if len(xs) > 1:
+        return helper_cumsum(sums, xs[1:])
+    return sums
 
 def generate_sample_points(points_X, points_Y):
     '''Generate 100 sampled points for a gesture.
@@ -56,27 +75,22 @@ def generate_sample_points(points_X, points_Y):
         sample_points_X: A list of X-axis values of a gesture after sampling, containing 100 elements.
         sample_points_Y: A list of Y-axis values of a gesture after sampling, containing 100 elements.
     '''
-    sample_points_X, sample_points_Y = [], []
-    # TODO: Start sampling (12 points)
-        
+    # TODO: Start sampling (10 points)
+    #sample_points_X = list()
+    #sample_points_Y = list()
 
-    # Setting the list of x-axis and y-axis values of the gesture
-    x_points = points_X
-    y_points = points_Y
-        # Here I am calculating the Euclidean distance and storing them in a variable so that I can later divide this distance into equidistant points
-    # Reference: https://stackoverflow.com/questions/51512197/python-equidistant-points-along-a-line-joining-set-of-points/51515357
-    eu_distance = np.cumsum(np.sqrt( np.ediff1d(x_points, to_begin=0)**2 + np.ediff1d(y_points, to_begin=0)**2 ))
-    eu_distance = eu_distance/eu_distance[-1]
-    # Now, I am carrying out interpolation
-    fx, fy = interp1d( eu_distance, x_points ), interp1d( eu_distance, y_points )
-    # Final step is to divide the distance into 100 equidistant points, that would complete the process of sampling.
-    alpha = np.linspace(0, 1, 100)
-    sample_points_X, sample_points_Y = fx(alpha), fy(alpha)
+    X = points_X
+    Y = points_Y
 
+    alpha_value = np.linspace(0, 1, 100)
+    dist = np.cumsum(np.sqrt(np.ediff1d(X, to_begin=0)**2  + np.ediff1d(Y, to_begin=0)**2))
+
+    dist /= dist[len(dist)-1]
+
+    dist_x, dist_y = interp1d(dist, X), interp1d(dist, Y)
+    sample_points_X, sample_points_Y = dist_x(alpha_value), dist_y(alpha_value)
     return sample_points_X, sample_points_Y
 
-
-# Pre-sample every template
 template_sample_points_X, template_sample_points_Y = [], []
 for i in range(10000):
     X, Y = generate_sample_points(template_points_X[i], template_points_Y[i])
@@ -84,11 +98,14 @@ for i in range(10000):
     template_sample_points_Y.append(Y)
 
 
+def calculate_distance(x,y):
+    return math.sqrt(pow(x,2) + pow(y,2))
+
 def do_pruning(gesture_points_X, gesture_points_Y, template_sample_points_X, template_sample_points_Y):
     '''Do pruning on the dictionary of 10000 words.
 
-    In this function, we use the pruning method described in the paper (or any other method you consider it reasonable)
-    to narrow down the number of valid words so that the ambiguity can be avoided to some extent.
+    In this function, we use the pruning method described in the paper (or any other method you consider reasonable)
+    to narrow down the number of valid words so that ambiguity can be avoided.
 
     :param gesture_points_X: A list of X-axis values of input gesture points, which has 100 values since we have
         sampled 100 points.
@@ -109,39 +126,44 @@ def do_pruning(gesture_points_X, gesture_points_Y, template_sample_points_X, tem
     '''
     valid_words, valid_template_sample_points_X, valid_template_sample_points_Y = [], [], []
     # TODO: Set your own pruning threshold
-    threshold = 20
-    # TODO: Do pruning (12 points)
-    # Here I am computing the start-to-start and end-to-end distances between a template and the unknown gesture entered by the user.
-    # Once I do that I have a predetermined threshold. Words satisfying this threshold will be returned as valid words.
-    for index, (sample_point_x, sample_point_y) in enumerate(zip(template_sample_points_X, template_sample_points_Y)):
-        start_dist = math.sqrt(((gesture_points_X[0][0] - sample_point_x[0])**2)+((gesture_points_Y[0][0] - sample_point_y[0])**2))
-        end_dist = math.sqrt(((gesture_points_X[0][-1] - sample_point_x[-1])**2)+((gesture_points_Y[0][-1] - sample_point_y[-1])**2))
-        if start_dist <= threshold:
-            if end_dist <= threshold:
-                valid_words.append(content[index].split('\t')[0])
-                valid_template_sample_points_X.append(sample_point_x)
-                valid_template_sample_points_Y.append(sample_point_y)
-    print(valid_words)
+    threshold = 18
+    # TODO: Do pruning (10 points)
+    len_temp_points = len(template_sample_points_X)
+    start_x = [gesture_points_X[0][0]]*len_temp_points
+    start_y = [gesture_points_Y[0][0]]*len_temp_points
+
+    end_x = [gesture_points_X[0][-1]]*len_temp_points
+    end_y = [gesture_points_Y[0][-1]]*len_temp_points
+
+    #Start Pruning
+    for idx, val in enumerate(template_sample_points_X):
+        d1 = calculate_distance(start_x[idx] - val[0], start_y[idx] - template_sample_points_Y[idx][0])
+        d2 = calculate_distance(end_x[idx] - val[-1], end_y[idx] - template_sample_points_Y[idx][-1])
+
+        if d1 > threshold or d2 > threshold:
+            continue
+        valid_template_sample_points_X.append(template_sample_points_X[idx])
+        valid_template_sample_points_Y.append(template_sample_points_Y[idx])
+        valid_words += [(words[idx],probabilities[words[idx]])]
+
+    print("No. of valid words = %d" %(len(valid_words)))
     return valid_words, valid_template_sample_points_X, valid_template_sample_points_Y
 
-# This is a custom helper function that carries out the task of scaling both the unknown gesture and the template points, by a scaling factor
+
 def get_scaled_points(sample_points_X, sample_points_Y, L):
-    x_max = max(sample_points_X)
-    x_min = min(sample_points_X)
-    W = x_max - x_min
-    y_max = max(sample_points_Y)
-    y_min = min(sample_points_Y)
-    H = y_max - y_min
-    # Computing the scale factor
-    s = L/max(H, W)
-    
+    x_maximum = max(sample_points_X)
+    x_minimum = min(sample_points_X)
+    W = x_maximum - x_minimum
+    y_maximum = max(sample_points_Y)
+    y_minimum = min(sample_points_Y)
+    H = y_maximum - y_minimum
+    r = L/max(H, W)
+
     gesture_X, gesture_Y = [], []
-    # Normalizing every point with the scale factor
     for point_x, point_y in zip(sample_points_X, sample_points_Y):
-        gesture_X.append(s * point_x)
-        gesture_Y.append(s * point_y)
-    
-    # Final step is to move the centroid of all the points to the origin
+        gesture_X.append(r * point_x)
+        gesture_Y.append(r * point_y)
+
     centroid_x = (max(gesture_X) - min(gesture_X))/2
     centroid_y = (max(gesture_Y) - min(gesture_Y))/2
     scaled_X, scaled_Y = [], []
@@ -168,45 +190,46 @@ def get_shape_scores(gesture_sample_points_X, gesture_sample_points_Y, valid_tem
     :return:
         A list of shape scores.
     '''
-    shape_scores = []
-    if len(valid_template_sample_points_X) == 0 or len(valid_template_sample_points_Y) == 0:
-        return shape_scores
     # TODO: Set your own L
     L = 1
-    # Scaled the gesture and template points, by calling the get_scaled_points function
-    gesture_sample_points_X, gesture_sample_points_Y = get_scaled_points(gesture_sample_points_X[0], gesture_sample_points_Y[0], L)
-    scaled_template_points_X, scaled_template_points_Y = [] , []
-    for template_points_X, template_points_Y in zip(valid_template_sample_points_X, valid_template_sample_points_Y):
-        points_X, points_Y = get_scaled_points(template_points_X, template_points_Y, L)
-        scaled_template_points_X.append(points_X)
-        scaled_template_points_Y.append(points_Y)
-    
-    # Finally, compute the Euclidean Norm and return the shape scores
-    for template_points_X, template_points_Y in zip(scaled_template_points_X, scaled_template_points_Y):
-        d = 0
-        for i in range(0, 100):
-            dist = math.sqrt((gesture_sample_points_X[i] - template_points_X[i])**2 + (gesture_sample_points_Y[i] - template_points_Y[i])**2)
-            d += dist
-        shape_scores.append(d/100)
-    
-    # TODO: Calculate shape scores (12 points)
-    
-    print(shape_scores)
+    # TODO: Calculate shape scores (10 points)
+    shape_scores = []
+    if len(gesture_sample_points_X) == 0 or len(gesture_sample_points_Y) == 0:
+        return shape_scores
+
+    if len(valid_template_sample_points_X) == 0 or len(valid_template_sample_points_Y) == 0:
+        return shape_scores
+
+    #gesture_sample_points_X, gesture_sample_points_Y = get_scaled_points(gesture_sample_points_X, gesture_sample_points_Y, L)
+    for idx, val in enumerate(valid_template_sample_points_X):
+        _s = 0
+        j = 0
+        while j < 100:
+            euc_distance = math.hypot(gesture_sample_points_X[0][j] - val[j],
+                                              gesture_sample_points_Y[0][j] - valid_template_sample_points_Y[idx][j])
+            _s += np.nan_to_num(euc_distance)
+            j += 1
+        shape_scores += [_s / 100]
+    try:
+        print(" Shape score of 1 = ", shape_scores[0])
+    except Exception as e:
+        print(str(e))
     return shape_scores
 
+#Helper functions Original
 def get_small_d(p_X, p_Y, q_X, q_Y):
-    min_d = []
-    for i in range(0, 100):
-        d = math.sqrt((p_X - q_X[i])**2 + (p_Y - q_Y[i])**2)
-        min_d.append(d)
-    return (sorted(min_d)[0])
+    min_distance = []
+    for n in range(0, 100):
+        distance = math.sqrt((p_X - q_X[n])**2 + (p_Y - q_Y[n])**2)
+        min_distance.append(distance)
+    return (sorted(min_distance)[0])
 
 def get_big_d(p_X, p_Y, q_X, q_Y, r):
     final_max = 0
-    for i in range(0, 100):
+    for n in range(0, 100):
         local_max = 0
-        d = get_small_d(p_X[i], p_Y[i], q_X, q_Y)
-        local_max = max(d-r , 0)
+        distance = get_small_d(p_X[n], p_Y[n], q_X, q_Y)
+        local_max = max(distance-r , 0)
         final_max += local_max
     return final_max
 
@@ -217,6 +240,28 @@ def get_delta(u_X, u_Y, t_X, t_Y, r, i):
         return 0
     else:
         return math.sqrt((u_X[i] - t_X[i])**2 + (u_Y[i] - t_Y[i])**2)
+
+#Helper functions 2
+def helper(x,y,points_X,points_Y):
+    #nums = list()
+    min_val = sys.maxsize
+    for p in zip(points_X,points_Y):
+        val = calculate_distance(p[1]-y, p[0]-x)
+        if val < min_val:
+            min_val = val
+    return min_val
+
+def location_score_helper1(gesture_sample_points_X,gesture_sample_points_Y,template_X,template_Y,r):
+    _s = 0
+    for idx,k in enumerate(zip(gesture_sample_points_X, gesture_sample_points_Y)):
+        distance = helper(gesture_sample_points_X[0][idx],gesture_sample_points_Y[0][idx],template_X,template_Y)-r
+        _s += max(distance,0)
+    return _s
+
+def location_score_helper2(x1,y1,x2,y2,D):
+    if D != 0:
+        return math.hypot(y2-y1,x2-x1)
+    return 0
 
 def get_location_scores(gesture_sample_points_X, gesture_sample_points_Y, valid_template_sample_points_X, valid_template_sample_points_Y):
     '''Get the location score for every valid word after pruning.
@@ -238,37 +283,35 @@ def get_location_scores(gesture_sample_points_X, gesture_sample_points_Y, valid_
     '''
     location_scores = []
     radius = 15
-    # TODO: Calculate location scores (12 points)
-    if len(valid_template_sample_points_X) == 0 or len(valid_template_sample_points_Y) == 0:
-        return location_scores
-    alpha = []
-    for i in range(100):
-        t=0
-        if (i<50):
-            t=50-i
-        else:
-            t =i-49
-        alpha.append(t/(51*50))
-    
-    for template_points_X, template_points_Y in zip(valid_template_sample_points_X, valid_template_sample_points_Y):
-        sum_score = 0
-        for i in range(0, 100):
-            delta = get_delta(gesture_sample_points_X[0], gesture_sample_points_Y[0], template_points_X, template_points_Y, radius, i)
-            prod = delta * alpha[i]
-            sum_score += prod
-        location_scores.append(sum_score)
-    print(location_scores)
-    return location_scores
+    # TODO: Calculate location scores (10 points)
+    values = [0.01]*100
+    # Calculating location_scores.
+    for idx, val in enumerate(valid_template_sample_points_X):
+        _s = 0
+        #D = get_delta(gesture_sample_points_X,gesture_sample_points_Y,valid_template_sample_points_X,valid_template_sample_points_Y,radius,i)
+        D = location_score_helper1(gesture_sample_points_X, gesture_sample_points_Y, val,
+                                    valid_template_sample_points_Y[idx], radius)
+        for j in range(len(gesture_sample_points_X)-1,-1,-1):
+            _s = _s + values[j] * location_score_helper2(gesture_sample_points_X[0][j], gesture_sample_points_Y[0][j],
+                                                           valid_template_sample_points_X[idx][j],
+                                                           valid_template_sample_points_Y[idx][j], D)
+        location_scores += [_s]
+
+    try:
+        print(" Location score of 1 = ", location_scores[0])
+    except Exception as e:
+        print("ERROR: " + str(e))
+    return location_scores[::-1]
 
 
 def get_integration_scores(shape_scores, location_scores):
     integration_scores = []
     # TODO: Set your own shape weight
-    shape_coef = 0.5
+    shape_coef = 0.85
     # TODO: Set your own location weight
-    location_coef = 0.5
+    location_coef = 0.15
     for i in range(len(shape_scores)):
-        integration_scores.append(shape_coef * shape_scores[i] + location_coef * location_scores[i])
+        integration_scores += [shape_coef * shape_scores[i] + location_coef * location_scores[i]]
     return integration_scores
 
 
@@ -285,12 +328,20 @@ def get_best_word(valid_words, integration_scores):
     '''
     best_word = 'the'
     # TODO: Set your own range.
-    n = 3
-    # TODO: Get the best word (12 points)
-     
-    idx = integration_scores.index(min(integration_scores))
-    best_word = valid_words[idx]
-    return best_word
+    n = len(valid_words)
+    if n > 5:
+        n = min(n,7)
+    suggestion = ""
+    # TODO: Get the best word (10 points)
+
+    if len(integration_scores) == 0:
+        return "No Word Found"
+    sortedIndex = np.argsort(np.array(integration_scores))
+
+    for i in range(0, n):
+        print(" Words = ", valid_words[i][0], " ", integration_scores[i])
+
+    return valid_words[sortedIndex[0]][0]
 
 
 @app.route("/")
@@ -324,11 +375,11 @@ def shark2():
 
     best_word = get_best_word(valid_words, integration_scores)
 
-
     end_time = time.time()
-    print('{"best_word":"' + best_word + '", "elapsed_time":"' + str(round((end_time - start_time) * 1000, 5)) + 'ms"}')
+    
+    print('{"best_word": "' + best_word + '", "elapsed_time": "' + str(round((end_time - start_time) * 1000, 5)) + ' ms"}')
 
-    return '{"best_word":"' + best_word + '", "elapsed_time":"' + str(round((end_time - start_time) * 1000, 5)) + 'ms"}'
+    return '{"best_word": "' + best_word + '", "elapsed_time": "' + str(round((end_time - start_time) * 1000, 5)) + ' ms"}'
 
 
 if __name__ == "__main__":
