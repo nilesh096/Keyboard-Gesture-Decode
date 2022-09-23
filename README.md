@@ -8,52 +8,61 @@ Check `server.py`
 
 # Steps
 
+
 1. Sampling
-SHARK2 performs comparations between the user input pattern and standard templates of word. But
-for this to happen, we must first make them comparable. To do that, irrespective of the length of the gesture,
-we must first sample the gesture to 100(in our case) points along the pattern.
-To do this, first I am calculating the Euclidean distance and storing them in a variable so that I can later 
-divide this distance into equidistant points. This is achieved by using the combination of Numpy's cumsum,
-sqrt and ediff1d functions. The ediff1d computes the differences between consecutive elements of an array,
-sqrt returns the non-negative square-root of an array, element-wise, while cumsum returns the cumulative sum of
-the elements along a given axis. After this is done, I am carrying out the process of interpolation, by using
-Scipy's interp1d function, which basically, interpolates a 1-D function. Finally, I am divide the distance into
-100 equidistant points, by Numpy's linspace function that returns evenly spaced numbers over a specified 
-interval.This completes the process of sampling.
+As part of sampling we first calculate the difference between the adjacent
+points in x-plane and y-plane for which the function ediff1d from numpy library is
+used. We also use the argument to_begin = 0 so that, adjacent difference starts from
+the first index and shape mismatch error is avoided. Once we have this difference, we
+then calculate the pairwise Euclidean distance and then the cumulative sum is
+calculated. Since, we can have words which repeat more than once like “hh”, “mm” that lie at the
+same position, we avoid this ambiguity by using centroid location. Otherwise, we get
+the proportion of line segments and scale the points by doing linear interpolation
+along the observed path of the which we have the coordinates. To have the 100 points
+at same distance from each other, we use the linespace method of numpy library to
+generate the equidistant points on the normalized line and then transform the points
+from normalized plane to the cartesian coordinate plane or real plane.
 
-2. Pruning
-Pruning refers to the process of computing the start-to-start and end-to-end distances between a 
-template and the unknown gesture entered by the user. Once I do that I have a predetermined threshold. Words 
-satisfying this threshold will be returned as valid words. I am not performing any normalization in this step.
-Normalization is performed in the next step.
+2. Do Pruning
+Since we want to avoid processing a large number of words which won’t
+match the gesture pattern, we prune/filter out those words. For this, we calculate the
+start to start and end to end distances of the template and the input gesture, if either
+of those distances are greater than the threshold, we will discard that template. We
+calculate the proportional matching distance given by the formula of sqrt((sqr(x1-x0)
++ sqr(y1-y0))). The do pruning function returned the valid words stored in a list along
+with its probabilities. For setting the threshold, we experimented with various values
+and narrowed down to 18, since with we were able to correctly predict the actual
+word corresponding to the actual gesture.
 
-3. Shape Score
-Before we generate the shape score, we need to normalize both the points of the valid words 
-returned by the pruning step, as well as the template points. To do this, I have written a custom helper
-function called, get_scaled_points. This function takes the  x-axis sample points, y-axis sample points and
-the parameter L. It then carries out the task of scaling both the unknown gesture and the template points, 
-by a scaling factor computed by the formula:
-s=L/max(H,W)
-The denominator is basically the largest side of the bounding box of the gesture.
-Once we multiply the scaling factor to all the points, the next step is to move the centroid of all the points 
-to the origin,which is done by the get_scaled_points, as well. Finally, we compute the Euclidean norm of the
-points returned by get_scaled_points function and return the shape scores.
+3. Get_shape_scores
+For this method, to calculate the shape scores, we first normalize
+the pointsin scale using the function already provided i.e getScaledPoints which scales
+the larger side of the bounding box to a length of 1. We the translate the pattern’s
+geometric centroid to the origin in the coordinate system. The centroid is calculated
+using the formula (max(gesture_X) - min(gesture_X))/2 and normalization is done in
+location. This normalization is done both for gestures and template.
+Now that the normalization is done, we calculate the sum of Euclidean distances
+between the gestures and the template sample points and then for each template, we
+append this sum for each template (shape score) and gesture combination to a list by
+dividing the sum by 100 i.e average sum of the equidistant sample points. Thus, we
+will get the shape score of every valid word after pruning
 
-4. Location Score
-This step is the most time-consuming step, as we do 100*100*number_of_templates calculation
-here. For this step, I created three helper functions, namely, get_small_d, get_big_d and get_delta, according 
-to the algorithm given in the publication. Also, I computed the alpha array in this step, which along with the
-delta value, is used to compute the final location score.
+4. Get_location_score
+Since the shape score alone is not enough to correctly recognize
+the input gesture, we also use the location channel or location score to get the
+accurate recognition of the gesture to a word. We set the radius of the r of the
+alphabetical key as 15. We calculate the sum of maximum of the minimum of the
+differences between the gesture and the template for all valid words If the distance is
+0 then it means that the entire input gesture is within the tunnel width of the
+estimated gesture. Instead of using the provided helper methods, I defined my own
+helper methods namely location_score_helper1 and location_score_helper_2 and
+helper. Thus, we get the location scores of every user gesture and template pair.
 
-5. Integration Score
-Final step is to compute the integration score, which is given by the formula:
-Integration Score = shape coefficient * shape score + location coefficient * location score , where 
-shape coefficient + location coefficient=1.
-In my case, both shape coefficient and location coefficient share the same value, that is, 0.5.
+5. get_integration_scores
+In this method, we set the weight of the each score i.e location and shape. I have given 0.5 weightage to shape and 0.5 weightage to location.
 
-Output
-The final output is the word with the lowest integration score. If there is a tie, we return all words,
-sharing that lowest integration score.
+6. Get_best_score
+In this we select the top 7 words recommended based on the lowest integration score. No word found is returned if there were no valid words found.
 
 
 # References:
