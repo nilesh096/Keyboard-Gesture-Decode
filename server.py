@@ -67,9 +67,7 @@ def generate_sample_points(points_X, points_Y):
         sample_points_X: A list of X-axis values of a gesture after sampling, containing 100 elements.
         sample_points_Y: A list of Y-axis values of a gesture after sampling, containing 100 elements.
     '''
-    # TODO: Start sampling (10 points)
-    #sample_points_X = list()
-    #sample_points_Y = list()
+    
 
     X = points_X
     Y = points_Y
@@ -117,9 +115,9 @@ def do_pruning(gesture_points_X, gesture_points_Y, template_sample_points_X, tem
             is a 1D list and has the length of 100.
     '''
     valid_words, valid_template_sample_points_X, valid_template_sample_points_Y = [], [], []
-    # TODO: Set your own pruning threshold
+    
     threshold = 18
-    # TODO: Do pruning (10 points)
+    
     len_temp_points = len(template_sample_points_X)
     start_x = [gesture_points_X[0][0]]*len_temp_points
     start_y = [gesture_points_Y[0][0]]*len_temp_points
@@ -182,9 +180,8 @@ def get_shape_scores(gesture_sample_points_X, gesture_sample_points_Y, valid_tem
     :return:
         A list of shape scores.
     '''
-    # TODO: Set your own L
+
     L = 1
-    # TODO: Calculate shape scores (10 points)
     shape_scores = []
     if len(gesture_sample_points_X) == 0 or len(gesture_sample_points_Y) == 0:
         return shape_scores
@@ -275,7 +272,7 @@ def get_location_scores(gesture_sample_points_X, gesture_sample_points_Y, valid_
     '''
     location_scores = []
     radius = 15
-    # TODO: Calculate location scores (10 points)
+    
     values = [0.01]*100
     # Calculating location_scores.
     for idx, val in enumerate(valid_template_sample_points_X):
@@ -298,10 +295,9 @@ def get_location_scores(gesture_sample_points_X, gesture_sample_points_Y, valid_
 
 def get_integration_scores(shape_scores, location_scores):
     integration_scores = []
-    # TODO: Set your own shape weight
     shape_coef = 0.85
-    # TODO: Set your own location weight
     location_coef = 0.15
+
     for i in range(len(shape_scores)):
         integration_scores += [shape_coef * shape_scores[i] + location_coef * location_scores[i]]
     return integration_scores
@@ -319,12 +315,12 @@ def get_best_word(valid_words, integration_scores):
     :return: The most probable word suggested to the user.
     '''
     best_word = 'the'
-    # TODO: Set your own range.
+    # T
     n = len(valid_words)
     if n > 5:
         n = min(n,7)
     suggestion = ""
-    # TODO: Get the best word (10 points)
+    
 
     if len(integration_scores) == 0:
         return "No Word Found"
